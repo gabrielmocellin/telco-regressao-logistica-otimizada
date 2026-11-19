@@ -16,7 +16,8 @@ def main():
         raise FileNotFoundError("Não foi possível encontrar o arquivo 'telco.csv'.")
 
     dados_df = pd.read_csv(arquivo) # DataFrame com os dados do arquivo CSV
-    print(dados_df.head())  # Exibe as primeiras linhas do DataFrame só pra verificar se os dados foram carregados corretamente
+    #print(dados_df.head())  # Exibe as primeiras linhas do DataFrame só pra verificar se os dados foram carregados corretamente
+    print(dados_df["Internet Type"].unique())
 
 
 if __name__ == "__main__":
