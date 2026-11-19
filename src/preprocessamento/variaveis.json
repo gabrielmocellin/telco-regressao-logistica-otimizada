@@ -1,0 +1,27 @@
+{
+    "variaveis": {
+        "numericas": [
+            "Age",
+            "Tenure in Months",
+            "Monthly Charge",
+            "Number of Referrals"
+        ],
+        "binarias": [
+            "Paperless Billing",
+            "Married"
+        ],
+        "categoricas": [
+            "Contract",
+            "Internet Type",
+            "Payment Method"
+        ],
+        "target": "Churn Label",
+        "data_leakage": [
+            "Churn Score",
+            "Churn Category",
+            "Churn Reason",
+            "Customer Status",
+            "Satisfaction Score"
+        ]
+    }
+}
