@@ -66,9 +66,9 @@ def gradiente(
     Calcula o vetor gradiente nabla f(w) in R^n:
       nabla f(w) = (1/m) * X^T @ (sigma(X @ w) - y)
     """
-    m = X.shape[0]
-    p = sigmoide(X @ w)  # Probabilidades preditas
-    grad = (X.T @ (p - y)) / m  # Gradiente da log-verossimilhança negativa média
+    m = X.shape[0] # Número de clientes (7043)
+    p = sigmoide(X @ w)  # Vetor de probabilidades previstas (7043,)
+    grad = (X.T @ (p - y)) / m  # Gradiente da log-verossimilhança negativa média, onde (p - y) é o vetor de erros do modelo (7043,)
     return grad
 
 
@@ -82,11 +82,11 @@ def hessiana(
       nabla^2 f(w) = (1/m) * X^T @ D @ X
     onde D = diag(p_i * (1 - p_i)) e p = sigma(X @ w).
     """
-    m = X.shape[0]
+    m = X.shape[0] # Número de clientes (7043)
     p = sigmoide(X @ w)
-    d = p * (1.0 - p)  # Vetor da diagonal de D (m,)
+    d = p * (1.0 - p)  # Vetor da diagonal de D (7043,)
 
-    # Multiplicação eficiente X^T @ D @ X sem alocar matriz (m x m)
+    # Multiplicação eficiente X^T @ D @ X sem alocar matriz (7043 x 7043)
     hess = (X.T @ (d[:, np.newaxis] * X)) / m
     return hess
 
