@@ -92,7 +92,6 @@ def preprocessar_dados(
         drop_first=True,
         dtype=float,
     )
-    print(f"Variáveis categóricas codificadas via One-Hot Encoding (k-1 colunas): {list(X_cat.columns)}")
 
     # 4. Concatenação da matriz de atributos X
     partes_X = [X_num, X_bin, X_cat]
@@ -112,19 +111,3 @@ def preprocessar_dados(
         raise ValueError(f"Valores inesperados na coluna alvo '{target}': {valores_invalidos}")
 
     return X, y
-
-
-if __name__ == "__main__":
-    dados_df = carregar_dados_brutos()
-    variaveis_dict = carregar_variaveis_json()
-    X, y = preprocessar_dados(dados_df, variaveis_dict)
-
-    print(f"Dimensão da matriz X: {X.shape} (m = {X.shape[0]} amostras, n = {X.shape[1]} parâmetros)")
-    print(f"Dimensão do vetor y:  {y.shape} (proporção de Churn = {y.mean():.2%})\n")
-    print("Colunas geradas para X:")
-    for idx, col in enumerate(X.columns):
-        print(f"  w[{idx:2d}] -> {col}")
-    print("\nPrimeiras 5 linhas de X:")
-    print(X.head())
-    print("\nPrimeiras 5 linhas de y:")
-    print(y.head())
