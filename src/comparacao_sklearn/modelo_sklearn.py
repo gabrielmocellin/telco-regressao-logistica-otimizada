@@ -12,16 +12,19 @@ from src.otimizacao.resultado import ResultadoOtimizacao
 def treinar_modelo_sklearn(
     X: np.ndarray,
     y: np.ndarray,
+    tolerancia: float = 1e-6,
     maximo_iteracoes: int = 1000,
 ) -> ResultadoOtimizacao:
     """
     Treina LogisticRegression equivalente à nossa formulação:
       - C=np.inf: sem regularização (minimiza a Log-Loss pura).
       - fit_intercept=False: a matriz X já inclui a coluna 'Intercepto' na posição 0.
+      - tol=tolerancia: critério de parada alinhado com Cauchy e Newton (1e-6).
     """
     modelo = LogisticRegression(
         C=np.inf,
         fit_intercept=False,
+        tol=tolerancia,
         max_iter=maximo_iteracoes,
     )
 
