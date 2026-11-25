@@ -22,10 +22,10 @@ def treinar_modelo_sklearn(
       - tol=tolerancia: critério de parada alinhado com Cauchy e Newton (1e-6).
     """
     modelo = LogisticRegression(
-        C=np.inf,
-        fit_intercept=False,
-        tol=tolerancia,
-        max_iter=maximo_iteracoes,
+        C=np.inf, # C=np.inf para penalty=None
+        fit_intercept=False, # X já inclui a coluna de intercepto
+        tol=tolerancia, # critério de parada alinhado com Cauchy e Newton
+        max_iter=maximo_iteracoes, # número máximo de iterações (padrão entre os 3 métodos)
     )
 
     inicio = time.perf_counter()
