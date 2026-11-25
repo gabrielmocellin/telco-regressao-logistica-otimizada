@@ -17,6 +17,7 @@ class ResultadoOtimizacao:
     iteracoes: int
     tempo_segundos: float
     convergiu: bool = True
+    motivo_parada: str = ""
     historico_perda: List[float] = field(default_factory=list)
     historico_norma_gradiente: List[float] = field(default_factory=list)
     historico_t_k: List[float] = field(default_factory=list)

@@ -32,6 +32,7 @@ def imprimir_comparacao(
     resultados: List[ResultadoOtimizacao],
     X: np.ndarray,
     y: np.ndarray,
+    titulo: str = "COMPARAÇÃO",
 ) -> None:
     """Imprime a tabela comparando o ponto inicial w0 com cada otimizador."""
     linhas = [("Início (w0 = 0)", avaliar_pesos(w_inicial, X, y), None)]
@@ -39,6 +40,7 @@ def imprimir_comparacao(
         linhas.append((res.metodo, avaliar_pesos(res.pesos, X, y), res))
 
     largura = 106
+    print(f"\n{titulo} ({X.shape[0]} amostras, Churn real: {y.mean():.2%})")
     print("=" * largura)
     print(
         f"{'Modelo':<18} | {'Loss':>9} | {'||Grad||':>10} | {'Prob. média':>11} | "

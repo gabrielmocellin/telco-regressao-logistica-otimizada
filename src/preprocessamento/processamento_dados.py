@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 def carregar_dados_brutos(nome_csv: str = "telco.csv") -> pd.DataFrame:
@@ -20,7 +21,6 @@ def carregar_dados_brutos(nome_csv: str = "telco.csv") -> pd.DataFrame:
         raise FileNotFoundError(f"Não foi possível encontrar o arquivo '{nome_csv}'.")
 
     # keep_default_na=False evita que a categoria "None" (de Internet Type) vire NaN
-    # se virar NaN, o One-Hot Encoding vai gerar uma coluna a menos, e o modelo vai falhar
     dados_df = pd.read_csv(arquivo, keep_default_na=False)
     return dados_df
 
@@ -39,26 +39,15 @@ def carregar_variaveis_json(nome_json: str = "variaveis.json") -> dict:
         raise FileNotFoundError(f"Não foi possível encontrar o arquivo '{nome_json}'.")
 
     with open(arquivo, "r", encoding="utf-8") as f:
-        variaveis_dict = json.load(f)
-
-    return variaveis_dict
+        return json.load(f)
 
 
-def preprocessar_dados(
+def _codificar_features_e_target(
     dados_df: pd.DataFrame,
     variaveis_dict: dict,
-    padronizar_numericas: bool = True,
     adicionar_intercepto: bool = True,
-) -> Tuple[pd.DataFrame, pd.Series]:
-    """
-    Pré-processa os dados do DataFrame, selecionando apenas as variáveis de interesse
-    e transformando todas as colunas em valores numéricos para a matriz X e o vetor y:
-      1. Numéricas: convertidas para float e padronizadas (Z-score).
-      2. Binárias ("Yes"/"No"): mapeadas para 1.0 e 0.0.
-      3. Categóricas (k categorias): codificadas via One-Hot Encoding com k-1 colunas (drop_first=True).
-      4. Intercepto: coluna de 1.0 inserida na primeira posição (índice 0) de X.
-      5. Target ("Churn Label"): mapeado de "Yes"/"No" para 1.0 e 0.0.
-    """
+) -> Tuple[pd.DataFrame, pd.Series, list[str]]:
+    """Codifica variáveis binárias/categóricas e separa X (sem padronizar) e y."""
     variaveis_interesse = variaveis_dict.get("variaveis", {})
     if not variaveis_interesse:
         raise ValueError("A lista de variáveis de interesse está vazia no arquivo JSON.")
@@ -68,14 +57,8 @@ def preprocessar_dados(
     categoricas = variaveis_interesse["categoricas"]
     target = variaveis_interesse["target"]
 
-    # 1. Processamento das variáveis numéricas
     X_num = dados_df[numericas].astype(float).copy()
-    if padronizar_numericas: # Padronização Z-score: (x - média) / desvio padrão
-        medias = X_num.mean(axis=0) # 0 axis refere-se às colunas (variáveis), 1 axis refere-se às linhas (amostras)
-        desvios = X_num.std(axis=0, ddof=0).replace(0.0, 1.0) # Evita divisão por zero se o desvio padrão for zero (quando todos os valores forem iguais)
-        X_num = (X_num - medias) / desvios
 
-    # 2. Processamento das variáveis binárias ("Yes" -> 1.0, "No" -> 0.0)
     mapa_binario = {"Yes": 1.0, "No": 0.0, 1: 1.0, 0: 0.0, True: 1.0, False: 0.0}
     X_bin = pd.DataFrame(index=dados_df.index)
     for col in binarias:
@@ -84,16 +67,9 @@ def preprocessar_dados(
             valores_invalidos = dados_df[col][X_bin[col].isna()].unique()
             raise ValueError(f"Valores inesperados na coluna binária '{col}': {valores_invalidos}")
 
-    # 3. Processamento das variáveis categóricas (One-Hot Encoding com k - 1 colunas)
     df_cat = dados_df[categoricas].fillna("None").astype(str)
-    X_cat = pd.get_dummies(
-        df_cat,
-        columns=categoricas,
-        drop_first=True,
-        dtype=float,
-    )
+    X_cat = pd.get_dummies(df_cat, columns=categoricas, drop_first=True, dtype=float)
 
-    # 4. Concatenação da matriz de atributos X
     partes_X = [X_num, X_bin, X_cat]
     if adicionar_intercepto:
         col_intercepto = pd.DataFrame(
@@ -104,10 +80,65 @@ def preprocessar_dados(
 
     X = pd.concat(partes_X, axis=1)
 
-    # 5. Processamento da variável resposta (target: "Yes" -> 1.0, "No" -> 0.0)
     y = dados_df[target].map(mapa_binario).astype(float)
     if y.isna().any():
         valores_invalidos = dados_df[target][y.isna()].unique()
         raise ValueError(f"Valores inesperados na coluna alvo '{target}': {valores_invalidos}")
 
+    return X, y, numericas
+
+
+def _padronizar_numericas(
+    X_treino: pd.DataFrame,
+    X_teste: pd.DataFrame | None,
+    numericas: list[str],
+) -> Tuple[pd.DataFrame, pd.DataFrame | None]:
+    """Calcula média e desvio padrão amostral (ddof=1) só no treino e aplica em ambos."""
+    X_treino = X_treino.copy()
+    medias = X_treino[numericas].mean(axis=0)
+    desvios = X_treino[numericas].std(axis=0, ddof=1).replace(0.0, 1.0)
+    X_treino[numericas] = (X_treino[numericas] - medias) / desvios
+
+    if X_teste is not None:
+        X_teste = X_teste.copy()
+        X_teste[numericas] = (X_teste[numericas] - medias) / desvios
+
+    return X_treino, X_teste
+
+
+def preprocessar_dados(
+    dados_df: pd.DataFrame,
+    variaveis_dict: dict,
+    padronizar_numericas: bool = True,
+    adicionar_intercepto: bool = True,
+) -> Tuple[pd.DataFrame, pd.Series]:
+    """Pré-processa a base completa (sem divisão treino/teste)."""
+    X, y, numericas = _codificar_features_e_target(
+        dados_df, variaveis_dict, adicionar_intercepto=adicionar_intercepto
+    )
+    if padronizar_numericas:
+        X, _ = _padronizar_numericas(X, None, numericas)
     return X, y
+
+
+def preparar_treino_teste(
+    dados_df: pd.DataFrame,
+    variaveis_dict: dict,
+    proporcao_teste: float = 0.20,
+    random_state: int = 42,
+    padronizar_numericas: bool = True,
+    adicionar_intercepto: bool = True,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """
+    Divide os dados em Treino (80%) e Teste (20%) de forma estratificada e
+    padroniza as colunas numéricas usando apenas média e desvio do treino.
+    """
+    X, y, numericas = _codificar_features_e_target(
+        dados_df, variaveis_dict, adicionar_intercepto=adicionar_intercepto
+    )
+    X_treino, X_teste, y_treino, y_teste = train_test_split(
+        X, y, test_size=proporcao_teste, random_state=random_state, stratify=y
+    )
+    if padronizar_numericas:
+        X_treino, X_teste = _padronizar_numericas(X_treino, X_teste, numericas)
+    return X_treino, X_teste, y_treino, y_teste
