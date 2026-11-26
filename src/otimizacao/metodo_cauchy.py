@@ -81,6 +81,7 @@ def busca_linear_secao_aurea(
 def otimizar_metodo_cauchy(
     X: np.ndarray,
     y: np.ndarray,
+    w_inicial: np.ndarray | None = None,
     tolerancia_gradiente: float = 1e-6,
     tolerancia_passo: float = 1e-8,
     tolerancia_busca_aurea: float = 1e-5,
@@ -93,13 +94,14 @@ def otimizar_metodo_cauchy(
       2. Busca linear exata : t_k = argmin_{t > 0} f(w_k + t * d_k)
       3. Atualização        : w_{k+1} = w_k + t_k * d_k
     """
-    w = np.zeros(X.shape[1], dtype=float)
+    w = np.zeros(X.shape[1], dtype=float) if w_inicial is None else w_inicial.astype(float).copy()
     historico_perda: List[float] = []
     historico_grad: List[float] = []
     historico_t_k: List[float] = []
 
     inicio = time.perf_counter()
     convergiu = False
+    motivo_parada = "Máximo de iterações"
     diff_pesos: float | None = None
 
     for k in range(maximo_iteracoes + 1):
@@ -113,8 +115,14 @@ def otimizar_metodo_cauchy(
         if exibir_progresso and (k <= 5 or k % 50 == 0 or norma_g <= tolerancia_gradiente):
             print(f"[Cauchy] iter {k:3d} | f(w) = {perda:.6f} | ||grad|| = {norma_g:.2e}")
 
-        if norma_g <= tolerancia_gradiente or (diff_pesos is not None and diff_pesos <= tolerancia_passo):
+        if norma_g <= tolerancia_gradiente:
             convergiu = True
+            motivo_parada = "Critério 1 (||grad||)"
+            break
+
+        if diff_pesos is not None and diff_pesos <= tolerancia_passo:
+            convergiu = True
+            motivo_parada = "Critério 2 (passo)"
             break
 
         if k == maximo_iteracoes:
@@ -136,6 +144,7 @@ def otimizar_metodo_cauchy(
         iteracoes=len(historico_perda) - 1,
         tempo_segundos=time.perf_counter() - inicio,
         convergiu=convergiu,
+        motivo_parada=motivo_parada,
         historico_perda=historico_perda,
         historico_norma_gradiente=historico_grad,
         historico_t_k=historico_t_k,
