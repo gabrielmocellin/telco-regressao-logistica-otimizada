@@ -6,20 +6,23 @@ Experimentos numéricos e gráficos para a Seção 3:
   4. Sensibilidade ao ponto inicial w0 (origem, aleatório moderado e distante).
 """
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from src.comparacao_sklearn.metricas import avaliar_pesos, imprimir_comparacao
 from src.comparacao_sklearn.modelo_sklearn import treinar_modelo_sklearn
+from src.experimentos.animacao_convergencia import gerar_animacao_convergencia
 from src.otimizacao.metodo_cauchy import otimizar_metodo_cauchy
 from src.otimizacao.metodo_newton import otimizar_metodo_newton
 from src.otimizacao.resultado import ResultadoOtimizacao
 
 
 PASTA_GRAFICOS = Path("docs") / "imgs" / "experimentos"
+PASTA_RESULTADOS = Path("docs") / "resultados"
 
 
 # =====================================================================
@@ -33,6 +36,92 @@ def _salvar_figura(fig: plt.Figure, pasta_saida: Path, nome_arquivo: str) -> Pat
     fig.savefig(caminho, dpi=150)
     plt.close(fig)
     return caminho
+
+
+def _salvar_csv(df: pd.DataFrame, pasta_resultados: Path, nome_arquivo: str) -> Path:
+    """Salva DataFrame em CSV padrão (vírgula, UTF-8 com BOM para compatibilidade no Excel)."""
+    pasta_resultados.mkdir(parents=True, exist_ok=True)
+    caminho = pasta_resultados / nome_arquivo
+    df.to_csv(caminho, index=False, encoding="utf-8-sig")
+    return caminho
+
+
+def _salvar_csv_comparacao_geral(
+    w0: np.ndarray,
+    resultados: List[ResultadoOtimizacao],
+    X_treino: np.ndarray,
+    y_treino: np.ndarray,
+    X_teste: np.ndarray,
+    y_teste: np.ndarray,
+    pasta_resultados: Path,
+    nome_arquivo: str,
+) -> Path:
+    """Salva as métricas do Experimento 1 (Treino e Teste) em um único CSV."""
+    registros: List[Dict[str, Any]] = []
+    for conjunto, X, y in [("Treino", X_treino, y_treino), ("Teste", X_teste, y_teste)]:
+        amostras = int(X.shape[0])
+        churn_real = float(y.mean())
+        modelos = [("Início (w0 = 0)", w0, None)] + [(r.metodo, r.pesos, r) for r in resultados]
+        for nome_modelo, pesos, res in modelos:
+            m = avaliar_pesos(pesos, X, y)
+            registros.append(
+                {
+                    "Conjunto": conjunto,
+                    "Amostras": amostras,
+                    "Churn_Real": churn_real,
+                    "Modelo": nome_modelo,
+                    "Loss": m["perda"],
+                    "Norma_Gradiente": res.norma_gradiente_final if res is not None else np.nan,
+                    "Prob_Media": m["prob_media"],
+                    "Exp_Neg_Loss": m["prob_geometrica"],
+                    "Acuracia": m["acuracia"],
+                    "Iteracoes": res.iteracoes if res is not None else pd.NA,
+                    "Tempo_s": res.tempo_segundos if res is not None else np.nan,
+                }
+            )
+    return _salvar_csv(pd.DataFrame(registros), pasta_resultados, nome_arquivo)
+
+
+def _salvar_csv_pesos(
+    colunas: List[str],
+    resultados: List[ResultadoOtimizacao],
+    pasta_resultados: Path,
+    nome_arquivo: str,
+) -> Path:
+    """Salva os pesos ótimos w* lado a lado por método."""
+    dados: Dict[str, Any] = {"Variavel": colunas}
+    for res in resultados:
+        chave = res.metodo.replace(" ", "_").replace("-", "_")
+        dados[chave] = res.pesos
+    return _salvar_csv(pd.DataFrame(dados), pasta_resultados, nome_arquivo)
+
+
+def _salvar_csv_experimento(
+    linhas: List[Tuple[str, ResultadoOtimizacao]],
+    pasta_resultados: Path,
+    nome_arquivo: str,
+    coluna_parametro: str | None = None,
+    mapa_parametro: Dict[str, Any] | None = None,
+) -> Path:
+    """Salva a tabela padronizada dos Experimentos 2, 3 e 4 em CSV."""
+    registros: List[Dict[str, Any]] = []
+    for config, res in linhas:
+        linha: Dict[str, Any] = {"Configuracao": config}
+        if coluna_parametro is not None and mapa_parametro is not None:
+            linha[coluna_parametro] = mapa_parametro[config]
+        linha.update(
+            {
+                "Metodo": res.metodo,
+                "Status": "CONVERGIU" if res.convergiu else "FALHOU",
+                "Motivo_Parada": res.motivo_parada,
+                "Iteracoes": res.iteracoes,
+                "Loss": res.perda_final,
+                "Norma_Gradiente": res.norma_gradiente_final,
+                "Tempo_s": res.tempo_segundos,
+            }
+        )
+        registros.append(linha)
+    return _salvar_csv(pd.DataFrame(registros), pasta_resultados, nome_arquivo)
 
 
 def imprimir_tabela_experimento(
@@ -109,8 +198,10 @@ def experimento_1_comparacao_geral(
     y_teste: np.ndarray,
     colunas: List[str],
     pasta_saida: Path = PASTA_GRAFICOS,
+    pasta_resultados: Path = PASTA_RESULTADOS,
+    gerar_animacao: bool = True,
 ) -> List[Path]:
-    """Roda Cauchy, Newton Puro e Scikit-Learn (tol=1e-6) e gera 2 gráficos."""
+    """Roda Cauchy, Newton Puro e Scikit-Learn (tol=1e-6), gera gráficos, animação e CSVs."""
     w0 = np.zeros(X_treino.shape[1], dtype=float)
     res_cauchy = otimizar_metodo_cauchy(X_treino, y_treino, tolerancia_gradiente=1e-6)
     res_newton = otimizar_metodo_newton(X_treino, y_treino, tolerancia_gradiente=1e-6, maximo_iteracoes=1000)
@@ -120,6 +211,23 @@ def experimento_1_comparacao_geral(
     imprimir_comparacao(w0, resultados, X_treino, y_treino, titulo="EXPERIMENTO 1 — TREINO")
     imprimir_comparacao(w0, resultados, X_teste, y_teste, titulo="EXPERIMENTO 1 — TESTE")
     _imprimir_pesos_lado_a_lado(colunas, resultados)
+
+    csv_geral = _salvar_csv_comparacao_geral(
+        w0,
+        resultados,
+        X_treino,
+        y_treino,
+        X_teste,
+        y_teste,
+        pasta_resultados,
+        "01_exp1_comparacao_geral.csv",
+    )
+    csv_pesos = _salvar_csv_pesos(
+        colunas,
+        resultados,
+        pasta_resultados,
+        "01_exp1_pesos_otimos.csv",
+    )
 
     # Gráfico 1: evolução de f(w^k) e ||grad f(w^k)||
     fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
@@ -174,7 +282,19 @@ def experimento_1_comparacao_geral(
     ax4.legend()
     img2 = _salvar_figura(fig2, pasta_saida, "02_exp1_pesos_e_desempenho.png")
 
-    return [img1, img2]
+    arquivos = [img1, img2, csv_geral, csv_pesos]
+    if gerar_animacao:
+        print("\nGerando animação de convergência (Cauchy vs. Newton Puro)...")
+        arquivos.extend(
+            gerar_animacao_convergencia(
+                res_cauchy,
+                res_newton,
+                pasta_saida=pasta_saida,
+                tolerancia=1e-6,
+            )
+        )
+
+    return arquivos
 
 
 # =====================================================================
@@ -185,7 +305,8 @@ def experimento_2_precisao(
     X_treino: np.ndarray,
     y_treino: np.ndarray,
     pasta_saida: Path = PASTA_GRAFICOS,
-) -> Path:
+    pasta_resultados: Path = PASTA_RESULTADOS,
+) -> List[Path]:
     """Execuções 2A, 2B e 2C variando apenas tolerancia_gradiente."""
     configs = [("2A (tol=1e-4)", 1e-4), ("2B (tol=1e-6)", 1e-6), ("2C (tol=1e-8)", 1e-8)]
     linhas: List[Tuple[str, ResultadoOtimizacao]] = []
@@ -201,12 +322,20 @@ def experimento_2_precisao(
         tempo_n.append(res_n.tempo_segundos)
 
     imprimir_tabela_experimento("EXPERIMENTO 2 — INFLUÊNCIA DA PRECISÃO (tolerancia_gradiente)", linhas)
+    csv_exp2 = _salvar_csv_experimento(
+        linhas,
+        pasta_resultados,
+        "02_exp2_precisao.csv",
+        coluna_parametro="Tolerancia",
+        mapa_parametro=dict(configs),
+    )
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
     categorias = [c[0] for c in configs]
     _plotar_barras_duplas(ax1, categorias, iter_c, iter_n, "Iterações por Tolerância", "Iterações", "%d")
     _plotar_barras_duplas(ax2, categorias, tempo_c, tempo_n, "Tempo de Execução por Tolerância", "Tempo (s)", "%.3fs")
-    return _salvar_figura(fig, pasta_saida, "03_exp2_precisao.png")
+    img = _salvar_figura(fig, pasta_saida, "03_exp2_precisao.png")
+    return [img, csv_exp2]
 
 
 # =====================================================================
@@ -217,7 +346,8 @@ def experimento_3_limite_iteracoes(
     X_treino: np.ndarray,
     y_treino: np.ndarray,
     pasta_saida: Path = PASTA_GRAFICOS,
-) -> Path:
+    pasta_resultados: Path = PASTA_RESULTADOS,
+) -> List[Path]:
     """Execuções 3A e 3B com orçamento curto: maximo_iteracoes = 5 e 50."""
     limites = [("3A (max_iter=5)", 5), ("3B (max_iter=50)", 50)]
     linhas: List[Tuple[str, ResultadoOtimizacao]] = []
@@ -233,6 +363,13 @@ def experimento_3_limite_iteracoes(
         grad_n.append(res_n.norma_gradiente_final)
 
     imprimir_tabela_experimento("EXPERIMENTO 3 — LIMITE MÁXIMO DE ITERAÇÕES (5 e 50)", linhas)
+    csv_exp3 = _salvar_csv_experimento(
+        linhas,
+        pasta_resultados,
+        "03_exp3_limite_iteracoes.csv",
+        coluna_parametro="Max_Iteracoes",
+        mapa_parametro=dict(limites),
+    )
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
     categorias = [lim[0] for lim in limites]
@@ -245,7 +382,8 @@ def experimento_3_limite_iteracoes(
     )
     ax2.axhline(1e-6, color="red", linestyle="--", linewidth=1, label="Tolerância (1e-6)")
     ax2.legend()
-    return _salvar_figura(fig, pasta_saida, "04_exp3_limite_iteracoes.png")
+    img = _salvar_figura(fig, pasta_saida, "04_exp3_limite_iteracoes.png")
+    return [img, csv_exp3]
 
 
 # =====================================================================
@@ -256,7 +394,8 @@ def experimento_4_pontos_iniciais(
     X_treino: np.ndarray,
     y_treino: np.ndarray,
     pasta_saida: Path = PASTA_GRAFICOS,
-) -> Path:
+    pasta_resultados: Path = PASTA_RESULTADOS,
+) -> List[Path]:
     """Testa Cauchy e Newton Puro a partir de 3 pontos iniciais w0 distintos."""
     rng = np.random.default_rng(42)
     n = X_treino.shape[1]
@@ -290,4 +429,10 @@ def experimento_4_pontos_iniciais(
         ax.legend(fontsize=8)
 
     imprimir_tabela_experimento("EXPERIMENTO 4 — SENSIBILIDADE AO PONTO INICIAL w0", linhas)
-    return _salvar_figura(fig, pasta_saida, "05_exp4_pontos_iniciais.png")
+    csv_exp4 = _salvar_csv_experimento(
+        linhas,
+        pasta_resultados,
+        "04_exp4_pontos_iniciais.csv",
+    )
+    img = _salvar_figura(fig, pasta_saida, "05_exp4_pontos_iniciais.png")
+    return [img, csv_exp4]

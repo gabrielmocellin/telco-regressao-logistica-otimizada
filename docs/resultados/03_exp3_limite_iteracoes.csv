@@ -1,0 +1,5 @@
+﻿Configuracao,Max_Iteracoes,Metodo,Status,Motivo_Parada,Iteracoes,Loss,Norma_Gradiente,Tempo_s
+3A (max_iter=5),5,Cauchy,FALHOU,Máximo de iterações,5,0.4004225053489578,0.04825236327262063,0.023654099997656886
+3A (max_iter=5),5,Newton Puro,FALHOU,Máximo de iterações,5,0.3675349295533216,7.497745578711111e-05,0.0038197999965632334
+3B (max_iter=50),50,Cauchy,FALHOU,Máximo de iterações,50,0.3678401754770519,0.0020762271711169747,0.24033960000087973
+3B (max_iter=50),50,Newton Puro,CONVERGIU,Critério 1 (||grad||),6,0.3675348437662911,1.32256794643556e-07,0.00437959999544546
